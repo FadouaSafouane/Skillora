@@ -1,41 +1,46 @@
-# auth.py
-# Fichier logique 
+import database
 
-class AuthSystem:
-    def __init__(self, database):
-        """Initialise le système avec une instance de la base de données"""
-        self.db = database
 
-    def verify_and_route(self, apogee_code):
-        """
-        Vérifie l'identité, le rôle et le statut du membre pour l'orienter.
-        Retourne un dictionnaire avec le statut de la requête et l'action à mener.
-        """
-        # Récupération du membre via son code Apogée unique
-        member = self.db.get_member_by_apogee(apogee_code)
-        
-        if not member:
-            return {"status": "error", "message": "Membre introuvable."}
-            
-        # 1. Vérifier si le membre est banni
-        if member["statut"] == "Banni":
-            return {
-                "status": "denied", 
-                "message": "Accès refusé : Votre compte a été banni ."
-            }
-            
-        # 2. Identifier le rôle et orienter l'utilisateur
-        if member["role"] == "admin":
-            return {
-                "status": "success", 
-                "role": "admin", 
-                "action": "Ouvrir le tableau de bord administrateur (ui/admin_dashboard.py)"
-            }
-        elif member["role"] == "membre":
-            return {
-                "status": "success", 
-                "role": "membre", 
-                "action": "Ouvrir le tableau de bord étudiant"
-            }
-            
-        return {"status": "error", "message": "Rôle utilisateur inconnu."}
+def authenticate(nom, prenom, code_apogee):
+    if not nom.strip() or not prenom.strip() or not str(code_apogee).strip():
+        return None
+
+    membre = database.get_member_by_credentials(
+        nom.strip(),
+        prenom.strip(),
+        str(code_apogee).strip()
+    )
+
+    if membre is None:
+        return None
+
+    statut = str(membre.get("statut_acces", "")).strip().lower()
+
+    if statut in ("banni", "non autorise", "non autorisé", "inactif", "bloque", "bloqué"):
+        return None
+
+    return membre
+
+
+def verify_and_route(code_apogee):
+    membre = database.get_member_by_apogee(code_apogee)
+
+    if membre is None:
+        return {
+            "status": "error",
+            "message": "Membre introuvable."
+        }
+
+    statut = str(membre.get("statut_acces", "")).strip().lower()
+
+    if statut in ("banni", "non autorise", "non autorisé", "inactif"):
+        return {
+            "status": "denied",
+            "message": "Ce compte est désactivé."
+        }
+
+    return {
+        "status": "success",
+        "role": membre.get("role", "Etudiant"),
+        "member": membre
+    }
